@@ -1,0 +1,41 @@
+---
+import { randomUUID } from "node:crypto";
+import SiteLayout from "../../layouts/SiteLayout.astro";
+import Icon from "../../components/Icon.astro";
+import RoomScene from "../../components/RoomScene.astro";
+import { displayDate, displayTime, durationLabel, featureIcon, featureLabel, kindLabels, searchParams } from "../../components/format";
+import { getSpace, searchAvailability } from "../../lib/booking";
+
+const space = getSpace(Astro.params.id ?? "");
+if (!space) return Astro.redirect("/?error=not_found", 303);
+const availability = searchAvailability(new URLSearchParams(Astro.url.search));
+const { filters, errors } = availability;
+const matching = availability.results.find((item) => item.space.id === space.id);
+const canBook = Object.keys(errors).length === 0 && matching?.available;
+const returnUrl = `/?${searchParams(filters)}#results`;
+const requestId = randomUUID();
+---
+<SiteLayout title={`Book ${space.name}`}>
+  <div class="shell detail-page">
+    <a class="back-link" href={returnUrl}><Icon name="back" size={18} />Back to your spaces</a>
+    <header class="detail-heading"><div><p class="eyebrow">{space.library} / {space.floor}</p><h1>{space.name}</h1><p class="detail-subtitle">{kindLabels[space.kind]}<span aria-hidden="true"> · </span>Up to {space.capacity} {space.capacity === 1 ? "person" : "people"}</p></div><span class="detail-step">Your space. Your session.</span></header>
+    <div class="detail-grid">
+      <section class="space-information" aria-labelledby="space-about"><RoomScene kind={space.kind} large /><div class="space-description"><h2 id="space-about">Room to settle in.</h2><p>{space.description}</p><ul class="detail-features" aria-label="Facilities">{space.features.map((feature) => <li><Icon name={featureIcon(feature)} />{featureLabel(feature)}</li>)}</ul><p class="inventory-note">Illustrative space and facilities for this student prototype.</p></div></section>
+      <section class="booking-panel" aria-labelledby="booking-heading" data-availability-scope data-date={filters.date}>
+        <p class="eyebrow">One last look</p><h2 id="booking-heading">Make it your space.</h2>
+        <dl class="session-details"><div><dt><Icon name="calendar" />Date</dt><dd>{displayDate(filters.date, true)}</dd></div><div><dt><Icon name="clock" />Time</dt><dd>{displayTime(filters.start)}{matching && <> – {displayTime(matching.end)}</>}<span>{durationLabel(filters.duration)} · Canberra time</span></dd></div><div><dt><Icon name="people" />Your group</dt><dd>{filters.people} {filters.people === 1 ? "person" : "people"}</dd></div></dl>
+        <div class="notice notice-update detail-live-notice" data-availability-update hidden role="status"><Icon name="refresh" size={18} /><p>Availability changed for this date. Refresh to check your session.</p><a class="text-button" href={`/spaces/${encodeURIComponent(space.id)}/?${searchParams(filters)}`}>Check availability <Icon name="arrow" size={16} /></a></div>
+        {canBook ? <>
+          <div class="confirmation-note"><Icon name="check" size={18} /><span>Available for your whole session</span></div>
+          <form method="post" action="/api/bookings" data-booking-form>
+            <input type="hidden" name="spaceId" value={space.id} /><input type="hidden" name="date" value={filters.date} /><input type="hidden" name="start" value={filters.start} /><input type="hidden" name="duration" value={filters.duration} /><input type="hidden" name="people" value={filters.people} /><input type="hidden" name="requestId" value={requestId} /><input type="hidden" name="library" value={filters.library} /><input type="hidden" name="kind" value={filters.kind} />{filters.features.map((feature) => <input type="hidden" name="features" value={feature} />)}
+            <button class="button button-primary confirm-button" type="submit"><span>Confirm booking</span><Icon name="arrow" size={20} /></button>
+          </form>
+          <p class="booking-smallprint">This reserves a demo space, not a real ANU room. Bookings stay linked to this browser. No sign-in needed.</p>
+        </> : <div class="booking-unavailable" role="status"><strong>{Object.keys(errors).length ? "Check your session details." : filters.people > space.capacity ? "This space is a little too small." : "This session is no longer available."}</strong><p>{Object.keys(errors).length ? Object.values(errors).join(" ") : filters.people > space.capacity ? `Choose a space with room for ${filters.people} people.` : "Someone else may have booked part of this time. Try a nearby session or choose another space."}</p>{matching?.alternatives.length ? <div class="detail-alternatives">{matching.alternatives.map((alternative) => <a class="button button-outline" href={`/spaces/${encodeURIComponent(space.id)}/?${searchParams({ ...filters, date: alternative.date, start: alternative.start })}`}>Try {displayTime(alternative.start)}<Icon name="arrow" size={16} /></a>)}</div> : null}<a class="button button-primary" href={returnUrl}>Find another space <Icon name="arrow" size={17} /></a></div>}
+        <a class="edit-session" href={`/?${searchParams(filters)}#space-search`}>Change session details</a>
+      </section>
+    </div>
+    <aside class="booking-guidelines"><span class="note-number" aria-hidden="true">A good thing to know</span><p>Book up to two demo hours per day, up to two weeks ahead. If your plans change, your space is easy to cancel in <a href="/bookings/">My bookings</a>.</p></aside>
+  </div>
+</SiteLayout>

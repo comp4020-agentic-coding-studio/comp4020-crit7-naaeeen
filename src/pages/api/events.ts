@@ -1,38 +1,42 @@
 import type { APIRoute } from "astro";
-import type { Message } from "../../lib/db";
-import { bus } from "../../lib/events";
+import { bus, type AvailabilityEvent } from "../../lib/events";
+import { json } from "../../lib/http";
 
-// The minimal server-sent-events (SSE) pattern: a long-lived streaming
-// response the browser consumes with `new EventSource("/api/events")`.
-// SSE is one-directional (server → browser) and plain HTTP, which makes it
-// the simplest live channel that works everywhere — reach for WebSockets
-// only when the client needs to push over the same connection.
-export const GET: APIRoute = () => {
-  let onMessage: (message: Message) => void;
-  let heartbeat: ReturnType<typeof setInterval>;
+let connections = 0;
+const MAX_CONNECTIONS = 200;
 
-  const stream = new ReadableStream<string>({
+export const GET: APIRoute = ({ request }) => {
+  if (connections >= MAX_CONNECTIONS) return json({ error: { code: "unavailable", message: "Live updates are busy. Refresh to check availability." } }, 503, { "retry-after": "30" });
+  connections++;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let onAvailability: ((event: AvailabilityEvent) => void) | undefined;
+  let stopped = false;
+  const cleanup = () => {
+    if (stopped) return;
+    stopped = true;
+    connections--;
+    if (heartbeat) clearInterval(heartbeat);
+    if (onAvailability) bus.off("availability", onAvailability);
+    request.signal.removeEventListener("abort", cleanup);
+  };
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      // an opening comment so the client (and the post-deploy CI probe) sees
-      // bytes immediately, and a periodic one so proxies don't drop the
-      // connection as idle
-      controller.enqueue(": connected\n\n");
-      heartbeat = setInterval(() => controller.enqueue(": ping\n\n"), 30_000);
-      onMessage = (message) => {
-        controller.enqueue(`data: ${JSON.stringify(message)}\n\n`);
+      const send = (message: string) => {
+        if (stopped) return;
+        try { controller.enqueue(encoder.encode(message)); }
+        catch { cleanup(); }
       };
-      bus.on("message", onMessage);
+      send(": connected\n\n");
+      heartbeat = setInterval(() => send(": ping\n\n"), 30_000);
+      onAvailability = ({ spaceId, date }) => send(`event: availability\ndata: ${JSON.stringify({ spaceId, date })}\n\n`);
+      bus.on("availability", onAvailability);
+      request.signal.addEventListener("abort", cleanup, { once: true });
+      if (request.signal.aborted) cleanup();
     },
-    cancel() {
-      clearInterval(heartbeat);
-      bus.off("message", onMessage);
-    },
+    cancel: cleanup,
   });
-
-  return new Response(stream.pipeThrough(new TextEncoderStream()), {
-    headers: {
-      "content-type": "text/event-stream",
-      "cache-control": "no-cache",
-    },
-  });
+  return new Response(stream, { headers: {
+    "content-type": "text/event-stream", "cache-control": "no-cache, no-store", "x-accel-buffering": "no",
+  } });
 };

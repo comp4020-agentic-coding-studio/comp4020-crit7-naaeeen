@@ -1,0 +1,49 @@
+---
+interface Props { kind?: string; variant?: number; large?: boolean; }
+const { kind = "room", variant = 0, large = false } = Astro.props;
+const palette = ["sage", "clay", "butter", "blue"];
+---
+<div class:list={["room-scene", `scene-${palette[variant % palette.length]}`, { "scene-large": large }]} aria-hidden="true">
+  <svg viewBox="0 0 400 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="205" cy="192" rx="116" ry="13" class="scene-shadow" />
+    <path d="M82 163 202 98l120 65-120 66Z" class="scene-floor" />
+    <path d="M82 62 202 0v98L82 163Z" class="scene-wall-left" />
+    <path d="M202 0 322 62v101L202 98Z" class="scene-wall-right" />
+    <path d="m98 72 80-42v60l-80 43V72Z" class="scene-window" />
+    <path d="M138 52v61M98 101l80-42" class="scene-window-line" />
+    {kind === "room" ? <>
+      <path d="m167 109 67-36 50 27-68 38-49-29Z" class="scene-board" />
+      <path d="m229 26 66 34v40l-66-34V26Z" class="scene-frame" />
+      <path d="m238 43 29 15m-29-5 45 24" class="scene-window-line" />
+      <path d="M145 139v28m114-29v28m-57-2v30" class="scene-legs" />
+      <path d="m135 136 62-34 73 39-67 38-68-43Z" class="scene-table" />
+      <path d="m135 136 68 37 67-32v9l-67 37-68-42v-9Z" class="scene-table-edge" />
+      <path d="m172 100-19-10v19l18 10 15-8v-19l-14 8Z" class="scene-chair" />
+      <path d="m254 121 17-10v19l-18 10-15-8v-19l16 8ZM167 172l-19-10v19l18 10 15-8v-19l-14 8Z" class="scene-chair" />
+      <path d="m192 131 18-9 19 10-18 10-19-11Z" class="scene-book" />
+      <path d="m179 141 13-7 13 7-13 7-13-7Z" class="scene-paper" />
+    </> : kind === "booth" ? <>
+      <path d="m133 112 52-28 70 37-50 29-72-38Z" class="scene-chair" />
+      <path d="M133 112v51l72 38v-51l-72-38Z" class="scene-chair-side" />
+      <path d="m205 150 50-29v52l-50 28v-51Z" class="scene-chair" />
+      <path d="m148 122 37-20 52 28-34 21-55-29Z" class="scene-cushion" />
+      <path d="m169 135 38-20 52 28-37 21-53-29Z" class="scene-table" />
+      <path d="m169 135 53 29 37-21v7l-37 21-53-29v-7Z" class="scene-table-edge" />
+      <path d="m196 135 17-9 16 9-17 9-16-9Z" class="scene-book" />
+      <path d="m260 67 27 14v25l-27-14V67Z" class="scene-frame" />
+    </> : <>
+      <path d="M137 140v36m107-38v37m-53-10v31" class="scene-legs" />
+      <path d="m130 133 57-31 68 37-58 31-67-37Z" class="scene-table" />
+      <path d="m130 133 67 37 58-31v8l-58 31-67-37v-8Z" class="scene-table-edge" />
+      <path d="m190 105 34 18v27l-34-18v-27Z" class="scene-monitor" />
+      <path d="m196 114 22 12v14l-22-12v-14Z" class="scene-screen" />
+      <path d="m172 141 19-10 20 11-19 10-20-11Z" class="scene-paper" />
+      <path d="m163 176-22-12v21l21 12 17-9v-21l-16 9Z" class="scene-chair" />
+      <path d="m248 37 34 18v37l-34-18V37Z" class="scene-frame" />
+    </>}
+    <path d="M290 141v29" class="scene-legs" />
+    <path d="M279 156h23l-4 24h-15l-4-24Z" class="scene-pot" />
+    <path d="M290 153c-20-5-23-22-19-27 14 0 20 14 19 27Zm1-12c-2-24 9-29 18-30 5 14-5 28-18 30Z" class="scene-leaf" />
+  </svg>
+  <span class="scene-index">{kind === "room" ? "A place to come together" : kind === "booth" ? "A corner of your own" : "Room for your next idea"}</span>
+</div>

@@ -5,7 +5,9 @@ import { defineConfig } from "astro/config";
 // database, and `astro build` emits the Node server the Dockerfile runs.
 export default defineConfig({
   output: "server",
-  adapter: node({ mode: "standalone" }),
+  adapter: node({ mode: "standalone", bodySizeLimit: 16_384 }),
+  // Ownership lives in an opaque cookie + SQLite, never adapter filesystem sessions.
+  session: false,
   security: {
     // Fly's proxy terminates TLS, so naming the deploy domain is what lets
     // Astro trust x-forwarded-proto and accept same-origin form POSTs.

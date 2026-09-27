@@ -1,0 +1,165 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "3db70a2f-092d-43e8-804b-313bc38f5e5c",
+  "prevId": "accefc94-da7c-4f56-a4d9-14289689c2a6",
+  "tables": {
+    "bookings": {
+      "name": "bookings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reference": {
+          "name": "reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_hash": {
+          "name": "owner_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "request_id": {
+          "name": "request_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "space_id": {
+          "name": "space_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "date": {
+          "name": "date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "start_minutes": {
+          "name": "start_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "end_minutes": {
+          "name": "end_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "people": {
+          "name": "people",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'confirmed'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cancelled_at": {
+          "name": "cancelled_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "bookings_reference_unique": {
+          "name": "bookings_reference_unique",
+          "columns": [
+            "reference"
+          ],
+          "isUnique": true
+        },
+        "bookings_owner_request": {
+          "name": "bookings_owner_request",
+          "columns": [
+            "owner_hash",
+            "request_id"
+          ],
+          "isUnique": true
+        },
+        "bookings_space_date": {
+          "name": "bookings_space_date",
+          "columns": [
+            "space_id",
+            "date",
+            "status",
+            "start_minutes"
+          ],
+          "isUnique": false
+        },
+        "bookings_owner_date": {
+          "name": "bookings_owner_date",
+          "columns": [
+            "owner_hash",
+            "date",
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "bookings_interval": {
+          "name": "bookings_interval",
+          "value": "\"bookings\".\"start_minutes\" >= 420 AND \"bookings\".\"end_minutes\" <= 1380 AND \"bookings\".\"start_minutes\" % 15 = 0 AND (\"bookings\".\"end_minutes\" - \"bookings\".\"start_minutes\") IN (30, 60, 90, 120)"
+        },
+        "bookings_people": {
+          "name": "bookings_people",
+          "value": "\"bookings\".\"people\" BETWEEN 1 AND 8"
+        },
+        "bookings_status": {
+          "name": "bookings_status",
+          "value": "\"bookings\".\"status\" IN ('confirmed', 'cancelled')"
+        },
+        "bookings_owner": {
+          "name": "bookings_owner",
+          "value": "length(\"bookings\".\"owner_hash\") = 64"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

@@ -1,53 +1,65 @@
 ---
-import { listMessages } from "../lib/db";
-import "../styles.css";
+import SiteLayout from "../layouts/SiteLayout.astro";
+import Icon from "../components/Icon.astro";
+import SpaceCard from "../components/SpaceCard.astro";
+import { displayDate, displayTime, durationLabel, featureLabel, kindLabels, searchParams } from "../components/format";
+import { getErrorMessage } from "../components/messages";
+import { searchAvailability, LIBRARIES, KINDS, FEATURES, DURATIONS } from "../lib/booking";
 
-const messages = listMessages();
+const availability = searchAvailability(new URLSearchParams(Astro.url.search));
+const { filters, errors, results } = availability;
+const hasErrors = Object.keys(errors).length > 0;
+const error = getErrorMessage(Astro.url.searchParams.get("error"));
+const available = results.filter((item) => item.available);
+const unavailable = results.filter((item) => !item.available);
+const filterCount = Number(Boolean(filters.library)) + Number(Boolean(filters.kind)) + filters.features.length;
+const times = Array.from({ length: 63 }, (_, index) => { const minutes = 420 + index * 15; return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`; });
 ---
+<SiteLayout title="Find your study space">
+  <section class="hero shell" aria-labelledby="page-heading">
+    <div class="hero-copy">
+      <p class="eyebrow"><span class="eyebrow-line" />Good company. Better focus.</p>
+      <h1 id="page-heading">Space for your<br /><em>next big idea.</em></h1>
+      <p class="hero-description">A quiet corner or room for the whole group.<br class="desktop-break" /> Find a study space that fits your plans.</p>
+    </div>
+    <div class="hero-note" aria-hidden="true">
+      <svg viewBox="0 0 220 174" fill="none"><path d="M30 137h152M58 137V51h78v86M81 137V71l82-22v88" stroke="currentColor" stroke-width="2"/><path d="M136 107h8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="m42 31 3-11m-16 19-10-4m18 15-14 3m138-25 9-8m-3 21 12-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="140" cy="52" r="34" class="hero-sun"/><path d="m113 146 13 4 13-4m-13 4v8" stroke="currentColor" stroke-width="1.5"/></svg>
+      <span>Make yourself at home.</span>
+    </div>
+  </section>
 
-<!doctype html>
-<html lang="en-AU">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>COMP4020 prototype</title>
-  </head>
-  <body>
-    <nav aria-label="site">
-      <a href="/">Guestbook</a>
-      <a href="/readme/">About</a>
-    </nav>
-    <main>
-      <h1>Guestbook</h1>
-      <p>
-        A minimal full-stack starter: messages live in SQLite on the machine's
-        volume (state survives a reload and a redeploy), and new messages
-        appear in every open tab over a server-sent-events stream — open this
-        page twice and sign it in one. Replace all of this with your own
-        prototype.
-      </p>
-      <form method="post" action="/api/messages">
-        <label for="body">Leave a message</label>
-        <input id="body" name="body" required maxlength="500" />
-        <button>Sign</button>
-      </form>
-      <ul id="messages">
-        {messages.map((message) => <li>{message.body}</li>)}
-      </ul>
-    </main>
-    <script>
-      // The live half of the demo: subscribe to the SSE stream and prepend
-      // messages as they arrive. The form itself needs none of this — its
-      // POST + redirect re-renders the submitting tab from SQLite; this
-      // stream is how every other tab finds out.
-      const list = document.querySelector("#messages");
-      const source = new EventSource("/api/events");
-      source.addEventListener("message", (event) => {
-        const message = JSON.parse(event.data);
-        const item = document.createElement("li");
-        item.textContent = message.body;
-        list?.prepend(item);
-      });
-    </script>
-  </body>
-</html>
+  <section class="search-section shell" aria-label="Find an available study space">
+    <form id="space-search" class="search-form" action="/#results" method="get" data-search-form>
+      <div class="search-heading"><h2>Your session, your space.</h2><span>All times in Canberra</span></div>
+      <div class="search-primary">
+        <div class="field"><label for="date"><Icon name="calendar" size={16} />Date</label><input id="date" name="date" type="date" required min={availability.dateMin} max={availability.dateMax} value={filters.date} aria-invalid={errors.date ? "true" : undefined} aria-describedby={errors.date ? "error-date" : undefined} />{errors.date && <span class="field-error" id="error-date">{errors.date}</span>}</div>
+        <div class="field"><label for="start"><Icon name="clock" size={16} />Start time</label><select id="start" name="start" aria-invalid={errors.start ? "true" : undefined} aria-describedby={errors.start ? "error-start" : undefined}>{times.map((time) => <option value={time} selected={filters.start === time}>{displayTime(time)}</option>)}</select>{errors.start && <span class="field-error" id="error-start">{errors.start}</span>}</div>
+        <div class="field"><label for="duration">How long?</label><select id="duration" name="duration" aria-invalid={errors.duration ? "true" : undefined} aria-describedby={errors.duration ? "error-duration" : undefined}>{DURATIONS.map((duration) => <option value={duration} selected={filters.duration === duration}>{durationLabel(duration)}</option>)}</select>{errors.duration && <span class="field-error" id="error-duration">{errors.duration}</span>}</div>
+        <div class="field"><label for="people"><Icon name="people" size={16} />People</label><select id="people" name="people" aria-invalid={errors.people ? "true" : undefined} aria-describedby={errors.people ? "error-people" : undefined}>{Array.from({length: 8}, (_, i) => i + 1).map((people) => <option value={people} selected={filters.people === people}>{people} {people === 1 ? "person" : "people"}</option>)}</select>{errors.people && <span class="field-error" id="error-people">{errors.people}</span>}</div>
+        <button type="submit" class="button button-primary search-submit" data-idle-label="Find a space"><span>Find a space</span><Icon name="arrow" size={19} /></button>
+      </div>
+      <details class="search-more" open={filterCount > 0 || Boolean(errors.library || errors.kind || errors.features)}>
+        <summary><span>Refine your space{filterCount > 0 && <span class="filter-count">{filterCount}</span>}</span><span class="refine-hint">Library, type &amp; facilities<span class="plus-mark" aria-hidden="true" /></span></summary>
+        <div class="search-secondary">
+          <div class="field"><label for="library">Library</label><select id="library" name="library" aria-invalid={errors.library ? "true" : undefined} aria-describedby={errors.library ? "error-library" : undefined}><option value="">All libraries</option>{LIBRARIES.map((library) => <option value={library} selected={filters.library === library}>{library}</option>)}</select>{errors.library && <span id="error-library" class="field-error">{errors.library}</span>}</div>
+          <div class="field"><label for="kind">Space type</label><select id="kind" name="kind" aria-invalid={errors.kind ? "true" : undefined} aria-describedby={errors.kind ? "error-kind" : undefined}><option value="">All spaces</option>{KINDS.map((kind) => <option value={kind} selected={filters.kind === kind}>{kindLabels[kind]}</option>)}</select>{errors.kind && <span id="error-kind" class="field-error">{errors.kind}</span>}</div>
+          <fieldset id="features" class="features-filter" aria-describedby={errors.features ? "error-features" : undefined}><legend>Make room for</legend><div>{FEATURES.map((feature) => <label class="check-label"><input type="checkbox" name="features" value={feature} checked={filters.features.includes(feature)} /><span>{featureLabel(feature)}</span></label>)}</div>{errors.features && <span id="error-features" class="field-error">{errors.features}</span>}</fieldset>
+        </div>
+      </details>
+    </form>
+    <div class="search-footnote"><span>Independent student prototype · Demo availability</span><a href="/readme/">How it works <Icon name="diagonal" size={13} /></a></div>
+  </section>
+
+  <section class="results-section shell" id="results" data-results data-date={filters.date} aria-labelledby="results-title">
+    {error && <div class="notice notice-error" role="alert"><Icon name="info" /><div><strong>Let’s try that again.</strong><p>{error}</p></div></div>}
+    {hasErrors ? <div class="notice notice-error" role="alert"><Icon name="info" /><div><h2 id="results-title" tabindex="-1">A few details need another look.</h2><p>Check the marked search fields, then find your space again.</p><ul>{Object.entries(errors).map(([field, message]) => <li><a href={`#${field}`}>{message}</a></li>)}</ul></div></div> : <>
+      <div class="results-heading"><div><p class="eyebrow">A little room to get things done</p><h2 id="results-title" tabindex="-1">{available.length > 0 ? <>Find your kind of focus<span class="heading-dot">.</span></> : "Let’s find a different fit."}</h2><p class="results-summary">{availability.availableCount} {availability.availableCount === 1 ? "space" : "spaces"} available · {displayDate(filters.date)} · {displayTime(filters.start)} · {durationLabel(filters.duration)} · {filters.people} {filters.people === 1 ? "person" : "people"}</p></div><span class="results-live"><span class="status-dot" />Demo availability</span></div>
+      {filterCount > 0 && <div class="active-filters" aria-label="Active filters">{filters.library && <span>{filters.library}</span>}{filters.kind && <span>{kindLabels[filters.kind] ?? filters.kind}</span>}{filters.features.map((feature) => <span>{featureLabel(feature)}</span>)}<a href={`/?${searchParams({ ...filters, library: "", kind: "", features: [] })}#results`}>Clear space filters</a></div>}
+      <div class="notice notice-update" data-availability-update hidden role="status"><Icon name="refresh" /><p>Availability changed for this date. Refresh to see the latest spaces.</p><button type="submit" form="space-search" class="text-button">Refresh results <Icon name="arrow" size={16} /></button></div>
+      {available.length > 0 && <div class="spaces-grid">{available.map((item, index) => <SpaceCard item={item} filters={filters} index={index} />)}</div>}
+      {available.length === 0 && <div class="empty-state"><span class="empty-symbol" aria-hidden="true"><Icon name="calendar" size={30} /></span><h3>{results.length === 0 ? "No spaces match this combination." : "These spaces are busy at that time."}</h3><p>{results.length === 0 ? "Try another library, a different space type or fewer facilities. A little flexibility can open up a lot of room." : "Try a nearby time below, or change your session to see more options."}</p><a class="button button-outline" href="/#space-search">Reset search <Icon name="refresh" size={16} /></a></div>}
+      {unavailable.length > 0 && <section class="nearby-section" aria-labelledby="nearby-heading"><div class="nearby-heading"><h2 id="nearby-heading">A little flexibility?</h2><p>These spaces are taken at your time. Try a nearby session.</p></div><div class="spaces-grid">{unavailable.map((item, index) => <SpaceCard item={item} filters={filters} index={index + available.length} />)}</div></section>}
+    </>}
+  </section>
+  <section class="considerate-note shell"><span class="note-number" aria-hidden="true">01 /</span><div><h2>Good spaces work when we share them.</h2><p>Plans change. Cancel a booking you no longer need and make a little room for someone else.</p></div><a href="/bookings/">Manage my bookings <Icon name="arrow" size={18} /></a></section>
+</SiteLayout>

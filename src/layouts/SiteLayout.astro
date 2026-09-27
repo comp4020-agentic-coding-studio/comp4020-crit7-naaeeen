@@ -1,0 +1,38 @@
+---
+import "../styles.css";
+import Icon from "../components/Icon.astro";
+interface Props { title: string; description?: string; current?: "search" | "bookings" | "about"; }
+const { title, description = "Find a study space that fits your plans. An independent student prototype with demo availability.", current = "search" } = Astro.props;
+---
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#19392f" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title} · Common Room</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+      <div class="shell header-inner">
+        <a class="wordmark" href="/" aria-label="Common Room home">
+          <svg class="brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M7 33V8h18v25M15 33V16l18-5v22H7Z" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="M25 24h2" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+          <span>common<span class="wordmark-second">room<span class="wordmark-dot">.</span></span></span>
+        </a>
+        <nav aria-label="Main navigation">
+          <a href="/" aria-current={current === "search" ? "page" : undefined}>Find a space</a>
+          <a href="/bookings/" aria-current={current === "bookings" ? "page" : undefined}><Icon name="bookmark" size={17} /><span>My bookings</span></a>
+        </nav>
+      </div>
+    </header>
+    <main id="main-content" tabindex="-1"><slot /></main>
+    <footer class="site-footer shell">
+      <div><span class="footer-brand">A little room for good ideas.</span><p>Independent student prototype · Demo availability</p></div>
+      <a href="/readme/" aria-current={current === "about" ? "page" : undefined}>About this project <Icon name="diagonal" size={17} /></a>
+    </footer>
+    <script>import "../client/ui";</script>
+  </body>
+</html>
