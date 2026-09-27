@@ -1269,18 +1269,24 @@ h3 {
 
 .detail-grid {
   display:grid;
-  grid-template-columns:1.25fr 1fr;
+  grid-template-columns:minmax(0, 1.25fr) minmax(0, 1fr);
   align-items:start;
   gap:40px;
 }
 
+.space-information,
+.booking-panel {
+  min-width:0;
+}
+
 .scene-large {
+  width:100%;
   height:365px;
   border-radius:10px;
 }
 
 .scene-large>svg {
-  width:610px;
+  width:min(610px, 100%);
   height:334px;
   margin-bottom:13px;
 }
@@ -1904,14 +1910,6 @@ h3 {
 }
 
 /* Motion is finite, supports state changes and never gates useful content. */
-@view-transition {
-  navigation:auto;
-}
-
-::view-transition-old(root),::view-transition-new(root) {
-  animation-duration:180ms;
-}
-
 @keyframes room-arrive {
   from {
     opacity:.35;
@@ -1985,9 +1983,6 @@ details[open]::details-content {
     transition:none!important;
     scroll-behavior:auto!important;
   }
-  ::view-transition-old(root),::view-transition-new(root) {
-    animation:none;
-  }
   .space-card:hover,.space-card:focus-within,.space-card:hover .room-scene>svg,.button:hover svg,.button:active {
     transform:none;
   }
@@ -2058,7 +2053,7 @@ details[open]::details-content {
   }
   .detail-grid {
     gap:25px;
-    grid-template-columns:1.1fr 1fr;
+    grid-template-columns:minmax(0, 1.1fr) minmax(0, 1fr);
   }
   .booking-panel {
     padding:24px;
@@ -2130,7 +2125,7 @@ details[open]::details-content {
   }
   .detail-grid {
     gap:30px;
-    grid-template-columns:1fr;
+    grid-template-columns:minmax(0, 1fr);
   }
   .booking-panel {
     order:-1;
@@ -2718,4 +2713,307 @@ details[open]::details-content {
   margin-left: 27px;
   font-size: .75rem;
   padding-block: 4px;
+}
+
+/* Co-brand the coursework identity while keeping the student context explicit. */
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 25px;
+  min-width: 0;
+}
+
+.course-mark {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding-left: 25px;
+  border-left: 1px solid #ccd3c3;
+}
+
+.course-mark img {
+  width: 115px;
+  max-width: 115px;
+  height: auto;
+  display: block;
+  flex-shrink: 0;
+}
+
+.course-mark > span {
+  font-size: .72rem;
+  font-weight: 650;
+  letter-spacing: .045em;
+  line-height: 1.35;
+}
+
+.course-mark small {
+  display: block;
+  font-size: .66rem;
+  color: var(--muted);
+  font-weight: 400;
+  letter-spacing: 0;
+  margin-top: 2px;
+}
+
+@media (max-width: 820px) {
+  .header-inner {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-block: 15px 8px;
+  }
+
+  .brand-group {
+    width: 100%;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .course-mark {
+    flex-direction: column;
+    gap: 5px;
+    padding-left: 14px;
+  }
+
+  .course-mark img {
+    width: 115px;
+  }
+
+  .course-mark > span {
+    font-size: .66rem;
+    white-space: nowrap;
+  }
+
+  .course-mark small {
+    display: inline;
+    font-size: .66rem;
+    margin-top: 0;
+    margin-left: 4px;
+  }
+
+  .site-header nav {
+    width: 100%;
+    justify-content: flex-end;
+    gap: 27px;
+  }
+
+  .site-header nav a {
+    font-size: .75rem;
+    min-height: 37px;
+  }
+}
+
+@media (max-width: 360px) {
+  .course-mark {
+    gap: 8px;
+    padding-left: 11px;
+  }
+
+  .course-mark img {
+    width: 115px;
+  }
+
+  .course-mark > span {
+    font-size: .66rem;
+  }
+
+  .course-mark small {
+    font-size: .61rem;
+  }
+}
+
+/* Finite motion makes arrival, exploration and success feel distinct. */
+@keyframes idea-arrives {
+  from { opacity: .5; transform: translateY(17px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes room-settles {
+  from { opacity: .5; transform: translateY(15px) rotate(-3deg) scale(.95); }
+  to { opacity: 1; transform: translateY(0) rotate(0) scale(1); }
+}
+
+@keyframes booking-celebration {
+  0% { transform: scale(.6) rotate(-15deg); }
+  65% { transform: scale(1.13) rotate(4deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-copy {
+    animation: idea-arrives 300ms var(--ease) backwards;
+  }
+
+  .hero-note svg,
+  .room-scene > svg {
+    animation: room-settles 300ms var(--ease) backwards;
+    transform-origin: 50% 80%;
+  }
+
+  .space-card:is(:hover, :focus-within) .room-scene > svg,
+  .space-information .room-scene:hover > svg {
+    transform: translateY(-7px) rotate(-1.3deg) scale(1.015);
+  }
+
+  .scene-leaf {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    transition: transform 300ms var(--ease);
+  }
+
+  .space-card:is(:hover, :focus-within) .scene-leaf {
+    transform: rotate(-7deg);
+  }
+
+  .button:is(:hover, :focus-visible) svg {
+    transform: translateX(5px);
+  }
+
+  .success-mark {
+    animation: booking-celebration 300ms var(--ease) backwards;
+  }
+}
+
+/* Shared account rules stay visible, with no extra step to reveal them. */
+.account-policy {
+  margin-block: 24px;
+  padding: 20px 23px;
+  border: 1px solid #d8dfcf;
+  border-radius: 8px;
+  background: #ecefe3;
+}
+
+.policy-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.policy-heading h2 {
+  font-family: var(--sans);
+  font-size: .88rem;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.policy-heading p,
+.policy-footnote {
+  font-size: .72rem;
+  color: var(--muted);
+  line-height: 1.55;
+  margin-top: 5px;
+}
+
+.policy-usage {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.policy-usage p {
+  margin-top: 0;
+}
+
+.policy-usage strong {
+  color: var(--forest);
+  font-weight: 650;
+}
+
+.policy-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  list-style: none;
+  padding: 17px 0 13px;
+  margin-top: 13px;
+  border-block: 1px solid #d5ddca;
+}
+
+.policy-rules strong,
+.policy-rules span {
+  display: block;
+  font-size: .74rem;
+}
+
+.policy-rules strong {
+  font-weight: 650;
+}
+
+.policy-rules span {
+  color: var(--muted);
+  font-size: .68rem;
+  margin-top: 3px;
+}
+
+.policy-footnote {
+  margin-top: 11px;
+}
+
+.confirmation-allowance {
+  background: #edf1e5;
+  border-radius: 6px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.confirmation-allowance h3 {
+  font-size: .77rem;
+  margin-bottom: 7px;
+}
+
+.confirmation-allowance p {
+  color: var(--muted);
+  font-size: .73rem;
+  line-height: 1.6;
+}
+
+.confirmation-allowance strong {
+  color: var(--forest);
+  font-weight: 600;
+}
+
+.confirmation-allowance a {
+  display: inline-block;
+  font-size: .72rem;
+  margin-top: 7px;
+}
+
+.confirmation-allowance .allowance-limit {
+  color: #754829;
+  margin-top: 9px;
+}
+
+@media (max-width: 820px) {
+  .policy-heading {
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .policy-usage {
+    text-align: left;
+  }
+
+  .policy-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 18px;
+  }
+}
+
+@media (max-width: 560px) {
+  .account-policy {
+    padding: 18px 17px;
+    margin-block: 21px;
+  }
+
+  .policy-heading p,
+  .policy-footnote {
+    font-size: .7rem;
+  }
+
+  .policy-rules strong {
+    font-size: .73rem;
+  }
+
+  .policy-rules span {
+    font-size: .67rem;
+  }
 }

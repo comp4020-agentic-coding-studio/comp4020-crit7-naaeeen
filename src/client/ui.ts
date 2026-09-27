@@ -56,6 +56,7 @@ function connectAvailability() {
 }
 
 if (searchForm && "fetch" in window && "DOMParser" in window && "AbortController" in window) {
+  let renderedSearchKey = `${window.location.pathname}${window.location.search}`;
   const searchStatus = document.createElement("span");
   searchStatus.className = "sr-only";
   searchStatus.setAttribute("role", "status");
@@ -106,9 +107,12 @@ if (searchForm && "fetch" in window && "DOMParser" in window && "AbortController
         count.textContent = String(filterCount);
         summary.append(count);
       }
+      const nextPolicy = nextDocument.querySelector("[data-search-policy]");
+      if (nextPolicy) document.querySelector("[data-search-policy]")?.replaceWith(nextPolicy);
       oldRegion.replaceWith(nextRegion);
       if (connectionInterrupted) showAvailabilityNotice("Live updates are interrupted. Refresh availability before choosing a space.");
       window.history.pushState({}, "", url);
+      renderedSearchKey = `${url.pathname}${url.search}`;
       const dateInput = document.querySelector<HTMLInputElement>("#date");
       const nextDateInput = nextDocument.querySelector<HTMLInputElement>("#date");
       if (dateInput && nextDateInput) { dateInput.min = nextDateInput.min; dateInput.max = nextDateInput.max; }
@@ -130,7 +134,11 @@ if (searchForm && "fetch" in window && "DOMParser" in window && "AbortController
       }
     }
   });
-  window.addEventListener("popstate", () => window.location.reload());
+  window.addEventListener("popstate", () => {
+    // Fragment navigation must preserve native skip-link and field focus.
+    const requestedSearchKey = `${window.location.pathname}${window.location.search}`;
+    if (requestedSearchKey !== renderedSearchKey) window.location.reload();
+  });
 }
 
 document.querySelectorAll<HTMLFormElement>("[data-booking-form], [data-cancel-form]").forEach((form) => {

@@ -1,13 +1,16 @@
 ---
 import SiteLayout from "../layouts/SiteLayout.astro";
 import Icon from "../components/Icon.astro";
+import BookingRules from "../components/BookingRules.astro";
 import SpaceCard from "../components/SpaceCard.astro";
 import { displayDate, displayTime, durationLabel, featureLabel, kindLabels, searchParams } from "../components/format";
 import { getErrorMessage } from "../components/messages";
-import { searchAvailability, LIBRARIES, KINDS, FEATURES, DURATIONS } from "../lib/booking";
+import { searchAvailability, getBookingAllowance, LIBRARIES, KINDS, FEATURES, DURATIONS } from "../lib/booking";
+import { isCalendarDate } from "../lib/dates";
 
 const availability = searchAvailability(new URLSearchParams(Astro.url.search));
 const { filters, errors, results } = availability;
+const allowance = getBookingAllowance(Astro.locals.bookingOwner, filters.date);
 const hasErrors = Object.keys(errors).length > 0;
 const error = getErrorMessage(Astro.url.searchParams.get("error"));
 const available = results.filter((item) => item.available);
@@ -18,7 +21,7 @@ const times = Array.from({ length: 63 }, (_, index) => { const minutes = 420 + i
 <SiteLayout title="Find your study space">
   <section class="hero shell" aria-labelledby="page-heading">
     <div class="hero-copy">
-      <p class="eyebrow"><span class="eyebrow-line" />Good company. Better focus.</p>
+      <p class="eyebrow"><span class="eyebrow-line" />A study-space concept for ANU.</p>
       <h1 id="page-heading">Space for your<br /><em>next big idea.</em></h1>
       <p class="hero-description">A quiet corner or room for the whole group.<br class="desktop-break" /> Find a study space that fits your plans.</p>
     </div>
@@ -32,7 +35,7 @@ const times = Array.from({ length: 63 }, (_, index) => { const minutes = 420 + i
     <form id="space-search" class="search-form" action="/#results" method="get" data-search-form>
       <div class="search-heading"><h2>Your session, your space.</h2><span>All times in Canberra</span></div>
       <div class="search-primary">
-        <div class="field"><label for="date"><Icon name="calendar" size={16} />Date</label><input id="date" name="date" type="date" required min={availability.dateMin} max={availability.dateMax} value={filters.date} aria-invalid={errors.date ? "true" : undefined} aria-describedby={errors.date ? "error-date" : undefined} />{errors.date && <span class="field-error" id="error-date">{errors.date}</span>}</div>
+        <div class="field"><label for="date"><Icon name="calendar" size={16} />Date</label><input id="date" name="date" type="date" required min={availability.dateMin} max={availability.dateMax} value={isCalendarDate(filters.date) ? filters.date : ""} aria-invalid={errors.date ? "true" : undefined} aria-describedby={errors.date ? "error-date" : undefined} />{errors.date && <span class="field-error" id="error-date">{errors.date}</span>}</div>
         <div class="field"><label for="start"><Icon name="clock" size={16} />Start time</label><select id="start" name="start" aria-invalid={errors.start ? "true" : undefined} aria-describedby={errors.start ? "error-start" : undefined}>{times.map((time) => <option value={time} selected={filters.start === time}>{displayTime(time)}</option>)}</select>{errors.start && <span class="field-error" id="error-start">{errors.start}</span>}</div>
         <div class="field"><label for="duration">How long?</label><select id="duration" name="duration" aria-invalid={errors.duration ? "true" : undefined} aria-describedby={errors.duration ? "error-duration" : undefined}>{DURATIONS.map((duration) => <option value={duration} selected={filters.duration === duration}>{durationLabel(duration)}</option>)}</select>{errors.duration && <span class="field-error" id="error-duration">{errors.duration}</span>}</div>
         <div class="field"><label for="people"><Icon name="people" size={16} />People</label><select id="people" name="people" aria-invalid={errors.people ? "true" : undefined} aria-describedby={errors.people ? "error-people" : undefined}>{Array.from({length: 8}, (_, i) => i + 1).map((people) => <option value={people} selected={filters.people === people}>{people} {people === 1 ? "person" : "people"}</option>)}</select>{errors.people && <span class="field-error" id="error-people">{errors.people}</span>}</div>
@@ -48,6 +51,7 @@ const times = Array.from({ length: 63 }, (_, index) => { const minutes = 420 + i
       </details>
     </form>
     <div class="search-footnote"><span>Independent student prototype · Demo availability</span><a href="/readme/">How it works <Icon name="diagonal" size={13} /></a></div>
+    <BookingRules allowance={allowance} context="search" />
   </section>
 
   <section class="results-section shell" id="results" data-results data-date={filters.date} aria-labelledby="results-title">

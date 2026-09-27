@@ -1,17 +1,53 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt, or, sql } from "drizzle-orm";
 import { db } from "./db";
-import { addDays, BOOKING_WINDOW_DAYS, CLOSING_MINUTES, defaultSlot, DURATIONS, formatTime, isCalendarDate, isFuture, MAX_DAILY_MINUTES, OPENING_MINUTES, parseTime, todayInCanberra } from "./dates";
+import { addDays, canberraNow, BOOKING_WINDOW_DAYS, CLOSING_MINUTES, defaultSlot, DURATIONS, formatTime, isCalendarDate, isFuture, MAX_DAILY_MINUTES, OPENING_MINUTES, parseTime, todayInCanberra } from "./dates";
 import { BookingError } from "./errors";
 import { publishAvailability } from "./events";
 import { ownerHash, validOwner } from "./identity";
 import { bookings, type BookingRecord } from "./schema";
 import { FEATURES, getSpace, KINDS, LIBRARIES, SPACES } from "./spaces";
-import type { AvailabilityResult, BookingView, SearchFilters } from "./types";
+import type { AvailabilityResult, BookingAllowance, BookingView, SearchFilters } from "./types";
 
 export { addDays, BOOKING_WINDOW_DAYS, CLOSING_MINUTES, DURATIONS, formatTime, MAX_DAILY_MINUTES, OPENING_MINUTES, todayInCanberra } from "./dates";
 export { FEATURES, getSpace, KINDS, LIBRARIES } from "./spaces";
-export type { AvailabilityItem, AvailabilityResult, BookingView, SearchFilters, Space } from "./types";
+export type { AvailabilityItem, AvailabilityResult, BookingAllowance, BookingView, SearchFilters, Space } from "./types";
+
+export const MAX_ACTIVE_BOOKINGS = 2;
+export const BOOKING_POLICY = Object.freeze({
+  maxActiveBookings: MAX_ACTIVE_BOOKINGS,
+  maxDailyMinutes: MAX_DAILY_MINUTES,
+  durations: Object.freeze([...DURATIONS]),
+  bookingWindowDays: BOOKING_WINDOW_DAYS,
+  openingMinutes: OPENING_MINUTES,
+  closingMinutes: CLOSING_MINUTES,
+});
+
+function activeBookingsForOwner(hash: string, now: Date) {
+  const current = canberraNow(now);
+  return and(eq(bookings.ownerHash, hash), eq(bookings.status, "confirmed"), or(
+    gt(bookings.date, current.date),
+    and(eq(bookings.date, current.date), gt(bookings.endMinutes, current.minutes)),
+  ));
+}
+
+export function getBookingAllowance(ownerToken: string | undefined, date: string, now = new Date()): BookingAllowance {
+  const selectedDate = isCalendarDate(date) ? date : todayInCanberra(now);
+  let activeBookings = 0;
+  let dailyMinutes = 0;
+  if (validOwner(ownerToken)) {
+    const hash = ownerHash(ownerToken);
+    activeBookings = db.select({ value: sql<number>`count(*)` }).from(bookings)
+      .where(activeBookingsForOwner(hash, now)).get()!.value;
+    dailyMinutes = db.select({ value: sql<number>`coalesce(sum(${bookings.endMinutes} - ${bookings.startMinutes}), 0)` })
+      .from(bookings).where(and(eq(bookings.ownerHash, hash), eq(bookings.date, selectedDate), eq(bookings.status, "confirmed"))).get()!.value;
+  }
+  return {
+    date: selectedDate, activeBookings, maxActiveBookings: MAX_ACTIVE_BOOKINGS,
+    remainingActiveBookings: Math.max(0, MAX_ACTIVE_BOOKINGS - activeBookings),
+    dailyMinutes, maxDailyMinutes: MAX_DAILY_MINUTES, remainingDailyMinutes: Math.max(0, MAX_DAILY_MINUTES - dailyMinutes),
+  };
+}
 
 const integer = (value: string, fallback: number) => /^\d{1,3}$/.test(value) ? Number(value) : fallback;
 
@@ -139,8 +175,8 @@ export function createBooking(input: Record<string, unknown>, ownerToken: string
   const start = parseTime(filters.start)!;
   const end = start + filters.duration;
   const hash = ownerHash(ownerToken);
-  // A synchronous IMMEDIATE transaction holds the writer lock across all three
-  // decisions. Different rooms cannot race past an owner's daily allowance.
+  // A synchronous IMMEDIATE transaction holds the writer lock across all limits
+  // and insertion. Different rooms or dates cannot race past account allowances.
   const outcome = db.transaction((tx) => {
     const previous = tx.select().from(bookings).where(and(eq(bookings.ownerHash, hash), eq(bookings.requestId, requestId))).get();
     if (previous) {
@@ -152,10 +188,15 @@ export function createBooking(input: Record<string, unknown>, ownerToken: string
     const transactionNow = now ?? new Date();
     const timeErrors = temporalErrors(filters, transactionNow);
     if (Object.keys(timeErrors).length) throw new BookingError("validation", "Choose a future booking time in the next 14 days.", 400, timeErrors);
+    const activeCount = tx.select({ value: sql<number>`count(*)` }).from(bookings)
+      .where(activeBookingsForOwner(hash, transactionNow)).get()!.value;
+    if (activeCount >= MAX_ACTIVE_BOOKINGS) {
+      throw new BookingError("active_limit", `This demo account can hold up to ${MAX_ACTIVE_BOOKINGS} active bookings. Cancel an upcoming booking or wait for one to finish.`, 409);
+    }
     const minutes = tx.select({ value: sql<number>`coalesce(sum(${bookings.endMinutes} - ${bookings.startMinutes}), 0)` })
       .from(bookings).where(and(eq(bookings.ownerHash, hash), eq(bookings.date, filters.date), eq(bookings.status, "confirmed"))).get()!.value;
     if (minutes + filters.duration > MAX_DAILY_MINUTES) {
-      throw new BookingError("daily_limit", "You can hold up to 120 minutes per day in this browser. Cancel a booking or choose another day.", 409);
+      throw new BookingError("daily_limit", "This demo account can book up to 120 minutes per day. Cancel an upcoming booking or choose another day.", 409);
     }
     const conflict = tx.select({ id: bookings.id }).from(bookings).where(and(
       eq(bookings.spaceId, space!.id), eq(bookings.date, filters.date), eq(bookings.status, "confirmed"),

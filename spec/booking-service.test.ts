@@ -51,6 +51,36 @@ describe("booking clock decisions with real isolated SQLite", () => {
     expect(service.listBookings(owner)).toHaveLength(1);
   });
 
+  it("counts an ongoing booking until its exact end and excludes ended bookings from the cap", () => {
+    const owner = token();
+    const before = new Date("2026-09-27T23:00:00Z"); // 09:00 Canberra.
+    service.createBooking(input({ spaceId: "menzies-room-1", start: "09:15" }), owner, before);
+    service.createBooking(input({ spaceId: "menzies-room-1", date: "2026-09-29" }), owner, before);
+    const third = input({ spaceId: "menzies-room-1", date: "2026-09-30" });
+    const ongoing = new Date("2026-09-28T00:00:00Z"); // First ends at10:15.
+    expect(() => service.createBooking(third, owner, ongoing)).toThrow(expect.objectContaining({ code: "active_limit", status: 409 }));
+    expect(service.getBookingAllowance(owner, "2026-09-28", ongoing)).toMatchObject({ activeBookings: 2, remainingActiveBookings: 0, dailyMinutes: 60, remainingDailyMinutes: 60 });
+    const ended = new Date("2026-09-28T00:15:00Z");
+    expect(service.getBookingAllowance(owner, "2026-09-28", ended)).toMatchObject({ activeBookings: 1, remainingActiveBookings: 1, dailyMinutes: 60 });
+    expect(service.createBooking(third, owner, ended).replayed).toBe(false);
+    expect(service.getBookingAllowance(owner, "2026-09-28", ended).activeBookings).toBe(2);
+  });
+
+  it("cancellation restores both the account slot and its selected-day minutes", () => {
+    const owner = token();
+    const now = new Date("2026-09-28T00:00:00Z");
+    const first = service.createBooking(input({ spaceId: "law-room-2", date: "2026-09-30", duration: 90 }), owner, now);
+    service.createBooking(input({ spaceId: "law-room-2", date: "2026-10-01" }), owner, now);
+    expect(service.getBookingAllowance(owner, "2026-09-30", now)).toEqual({
+      date: "2026-09-30", activeBookings: 2, maxActiveBookings: 2, remainingActiveBookings: 0,
+      dailyMinutes: 90, maxDailyMinutes: 120, remainingDailyMinutes: 30,
+    });
+    service.cancelBooking(first.booking.id, owner, now);
+    expect(service.getBookingAllowance(owner, "2026-09-30", now)).toMatchObject({ activeBookings: 1, remainingActiveBookings: 1, dailyMinutes: 0, remainingDailyMinutes: 120 });
+    service.createBooking(input({ spaceId: "law-room-2", date: "2026-09-30", duration: 120 }), owner, now);
+    expect(service.getBookingAllowance(owner, "2026-09-30", now)).toMatchObject({ activeBookings: 2, dailyMinutes: 120, remainingDailyMinutes: 0 });
+  });
+
   it("rejects cancellation at the start and leaves the confirmed record intact", () => {
     const owner = token();
     const created = service.createBooking(input({ spaceId: "hancock-room-1" }), owner, new Date("2026-09-28T00:00:00Z"));

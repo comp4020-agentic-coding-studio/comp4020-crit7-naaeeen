@@ -19,7 +19,7 @@ These are functional promises, protected by checks in `spec/`. Whether the layou
 - Review the space and session before confirming. My bookings shows your confirmation and reservation reference.
 - Cancel a future reservation to release its time. A reservation that has started cannot be cancelled.
 
-The prototype uses sample opening hours of 07:00–23:00 and accepts dates from today through 14 days ahead. Each browser can hold up to 120 confirmed minutes on a date. These are explicit prototype rules, not a claim that every ANU space follows one policy.
+The prototype uses sample opening hours of 07:00–23:00 and accepts dates from today through 14 days ahead. Each demo account, saved in the current browser, can hold at most two confirmed reservations that have not ended, including an ongoing session. It can hold up to 120 confirmed minutes on a date. Cancelling before a session starts releases its reservation slot and daily allowance. These are explicit prototype rules, not a claim that every ANU space follows one policy.
 
 ## Returning to a booking
 
@@ -32,3 +32,5 @@ Availability changes can notify another open tab without revealing who made a bo
 The [Crit 7 brief](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/crits/07-anu-system/) asks for one real ANU-system slice connected end to end. This project keeps the provided Astro, Drizzle and SQLite stack and the course-managed Fly deployment. Data belongs on the persistent volume, and schema changes travel as committed migrations. The original invariant, README, streaming and origin-protection checks remain part of the contract.
 
 The [Chifley desk and booth trial](https://anulib.anu.edu.au/news-events/news/bookable-spaces-chifley-library) has its own check-in rules. This prototype does not infer or automate real-world no-show decisions. Its research basis is the public course and library documentation, supplied screenshots, and read-only inspection of the existing booking interface in Edge. No real ANU booking was created or cancelled during that inspection.
+
+The ANU wordmark is the original logo served by the university's [website assets](https://marketing-pages.anu.edu.au/_anu/4/images/logos/anu_logo_print.png). It identifies the campus context; Common Room remains an independent COMP4020 student project.

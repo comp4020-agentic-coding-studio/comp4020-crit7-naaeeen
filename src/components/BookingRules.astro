@@ -1,0 +1,26 @@
+---
+import { BOOKING_POLICY, getBookingAllowance } from "../lib/booking";
+import { displayDate } from "./format";
+interface Props {
+  allowance: ReturnType<typeof getBookingAllowance>;
+  context: "search" | "detail" | "bookings";
+}
+const { allowance, context } = Astro.props;
+const headingId = `booking-rules-${context}`;
+---
+<aside class="account-policy" aria-labelledby={headingId} data-search-policy={context === "search" ? true : undefined}>
+  <div class="policy-heading">
+    <div><h2 id={headingId}>Booking rules</h2><p>Per demo account · Saved in this browser · No ANU sign-in</p></div>
+    <div class="policy-usage" aria-label="Your demo account allowance">
+      <p data-active-count><strong>{allowance.activeBookings} of {allowance.maxActiveBookings}</strong> active bookings</p>
+      <p data-daily-allowance><strong>{allowance.remainingDailyMinutes} minutes left</strong> on {displayDate(allowance.date)}</p>
+    </div>
+  </div>
+  <ul class="policy-rules">
+    <li><strong>{BOOKING_POLICY.maxActiveBookings} active bookings</strong><span>Upcoming or in progress</span></li>
+    <li><strong>{BOOKING_POLICY.maxDailyMinutes} minutes per day</strong><span>Total across your bookings</span></li>
+    <li><strong>{BOOKING_POLICY.durations.join(" / ")} min</strong><span>Choose a length per booking</span></li>
+    <li><strong>{BOOKING_POLICY.bookingWindowDays} days ahead</strong><span>Maximum advance booking</span></li>
+  </ul>
+  <p class="policy-footnote">Canberra time · Cancel before the start to free your allowance.</p>
+</aside>

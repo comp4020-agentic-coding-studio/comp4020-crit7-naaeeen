@@ -51,3 +51,13 @@ export interface BookingView {
   createdAt: string;
   canCancel: boolean;
 }
+
+export interface BookingAllowance {
+  date: string;
+  activeBookings: number;
+  maxActiveBookings: number;
+  remainingActiveBookings: number;
+  dailyMinutes: number;
+  maxDailyMinutes: number;
+  remainingDailyMinutes: number;
+}

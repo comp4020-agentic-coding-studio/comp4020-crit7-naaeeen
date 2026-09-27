@@ -116,6 +116,48 @@ describe("booking HTTP contracts", () => {
     expect((await responses.find((response) => response.status === 409)!.json()).error.code).toBe("daily_limit");
   });
 
+  it("limits an account to two active bookings, replays at the cap, and releases a slot on cancellation", async () => {
+    const cookie = await owner();
+    const firstRequest = input({ date: localDate(8), spaceId: "chifley-room-1", duration: 30 });
+    const secondRequest = input({ date: localDate(9), spaceId: "chifley-room-1", duration: 30 });
+    const thirdRequest = input({ date: localDate(10), spaceId: "chifley-room-1", duration: 30 });
+    const first = await post(cookie, firstRequest);
+    expect(first.status).toBe(201);
+    const { booking } = await first.json();
+    expect((await post(cookie, secondRequest)).status).toBe(201);
+    const third = await post(cookie, thirdRequest);
+    expect(third.status).toBe(409);
+    expect((await third.json()).error.code).toBe("active_limit");
+    const replay = await post(cookie, firstRequest);
+    expect(replay.status).toBe(200);
+    expect((await replay.json()).booking.id).toBe(booking.id);
+    const native = await fetch(url("/api/bookings"), {
+      method: "POST", headers: { cookie, origin: baseUrl }, redirect: "manual",
+      body: new URLSearchParams(Object.entries({ ...thirdRequest, library: "Chifley Library", kind: "room" }).map(([key, value]) => [key, String(value)])),
+    });
+    expect(native.status).toBe(303);
+    const recovery = new URL(native.headers.get("location")!, baseUrl);
+    expect(recovery.searchParams.get("error")).toBe("active_limit");
+    expect(recovery.searchParams.get("date")).toBe(localDate(10));
+    expect(recovery.searchParams.get("library")).toBe("Chifley Library");
+    expect((await post(cookie, {}, `/api/bookings/${booking.id}/cancel`)).status).toBe(200);
+    expect((await post(cookie, thirdRequest)).status).toBe(201);
+  });
+
+  it("enforces the active-booking cap during concurrent requests for different days and spaces", async () => {
+    const cookie = await owner();
+    const responses = await Promise.all(Array.from({ length: 6 }, (_, index) => post(cookie, input({
+      date: localDate(index + 1), spaceId: index % 2 === 0 ? "hancock-room-2" : "law-room-2", start: "19:00", duration: 30,
+    }))));
+    expect(responses.filter((response) => response.status === 201)).toHaveLength(2);
+    expect(responses.filter((response) => response.status === 409)).toHaveLength(4);
+    for (const response of responses.filter((value) => value.status === 409)) {
+      expect((await response.json()).error.code).toBe("active_limit");
+    }
+    const listing = await (await fetch(url("/api/bookings"), { headers: { cookie } })).json();
+    expect(listing.bookings).toHaveLength(2);
+  });
+
   it("persists owned cancellation, releases availability and restores the allowance", async () => {
     const cookie = await owner();
     const body = input({ date: localDate(5), spaceId: "law-room-2", duration: 120 });

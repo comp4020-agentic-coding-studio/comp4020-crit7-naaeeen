@@ -3,13 +3,15 @@ import { randomUUID } from "node:crypto";
 import SiteLayout from "../../layouts/SiteLayout.astro";
 import Icon from "../../components/Icon.astro";
 import RoomScene from "../../components/RoomScene.astro";
+import BookingRules from "../../components/BookingRules.astro";
 import { displayDate, displayTime, durationLabel, featureIcon, featureLabel, kindLabels, searchParams } from "../../components/format";
-import { getSpace, searchAvailability } from "../../lib/booking";
+import { getSpace, searchAvailability, getBookingAllowance } from "../../lib/booking";
 
 const space = getSpace(Astro.params.id ?? "");
 if (!space) return Astro.redirect("/?error=not_found", 303);
 const availability = searchAvailability(new URLSearchParams(Astro.url.search));
 const { filters, errors } = availability;
+const allowance = getBookingAllowance(Astro.locals.bookingOwner, filters.date);
 const matching = availability.results.find((item) => item.space.id === space.id);
 const canBook = Object.keys(errors).length === 0 && matching?.available;
 const returnUrl = `/?${searchParams(filters)}#results`;
@@ -24,6 +26,13 @@ const requestId = randomUUID();
       <section class="booking-panel" aria-labelledby="booking-heading" data-availability-scope data-date={filters.date}>
         <p class="eyebrow">One last look</p><h2 id="booking-heading">Make it your space.</h2>
         <dl class="session-details"><div><dt><Icon name="calendar" />Date</dt><dd>{displayDate(filters.date, true)}</dd></div><div><dt><Icon name="clock" />Time</dt><dd>{displayTime(filters.start)}{matching && <> – {displayTime(matching.end)}</>}<span>{durationLabel(filters.duration)} · Canberra time</span></dd></div><div><dt><Icon name="people" />Your group</dt><dd>{filters.people} {filters.people === 1 ? "person" : "people"}</dd></div></dl>
+        <aside class="confirmation-allowance" aria-label="Your demo account allowance">
+          <h3>Your demo account</h3>
+          <p><strong>{allowance.activeBookings} of {allowance.maxActiveBookings}</strong> active bookings · <strong>{allowance.remainingActiveBookings} slots left</strong></p>
+          <p><strong>{allowance.remainingDailyMinutes} of {allowance.maxDailyMinutes} minutes left</strong> on {displayDate(allowance.date)}</p>
+          {allowance.remainingActiveBookings === 0 ? <p class="allowance-limit">Your active-booking limit is reached. Cancel an upcoming booking or wait for one to finish.</p> : filters.duration > allowance.remainingDailyMinutes ? <p class="allowance-limit">This session exceeds your remaining daily allowance. Choose a shorter session or another day.</p> : null}
+          <a href="/bookings/">Manage bookings</a>
+        </aside>
         <div class="notice notice-update detail-live-notice" data-availability-update hidden role="status"><Icon name="refresh" size={18} /><p>Availability changed for this date. Refresh to check your session.</p><a class="text-button" href={`/spaces/${encodeURIComponent(space.id)}/?${searchParams(filters)}`}>Check availability <Icon name="arrow" size={16} /></a></div>
         {canBook ? <>
           <div class="confirmation-note"><Icon name="check" size={18} /><span>Available for your whole session</span></div>
@@ -36,6 +45,6 @@ const requestId = randomUUID();
         <a class="edit-session" href={`/?${searchParams(filters)}#space-search`}>Change session details</a>
       </section>
     </div>
-    <aside class="booking-guidelines"><span class="note-number" aria-hidden="true">A good thing to know</span><p>Book up to two demo hours per day, up to two weeks ahead. If your plans change, your space is easy to cancel in <a href="/bookings/">My bookings</a>.</p></aside>
+    <BookingRules allowance={allowance} context="detail" />
   </div>
 </SiteLayout>
