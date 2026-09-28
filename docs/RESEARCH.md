@@ -45,3 +45,13 @@ The accessible alternative loaded successfully in the existing Edge session. It 
 On the accessible form, Capacity choices were buckets: Space For1-4 people and Space For5-8 people. Selecting1-4 and Show Availability (read-only search) returned63 options across all categories/zones, including capacity1 computers, capacity2 rooms/booths, and capacity4 spaces. Date selection precedes many per-space time options, ending in Submit Times. No time selection or reservation submission was performed.
 
 For the declared task of finding space for4 people for one uninterrupted hour, the broad bucket leaves users to reject smaller spaces and inspect intervals. The design response is exact party-size compatibility plus full-interval availability, one consistent interface for keyboard and pointer, and retained query filters on errors. This is an observed task mismatch, not a claim that LibCal's range filter malfunctions.
+
+## Motion and status feedback
+
+[MDN reduced-motion](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@media/prefers-reduced-motion) defines the user's preference for reducing nonessential movement. [View Transition API](https://developer.mozilla.org/en-US/docs/Web/API/View_Transition_API) offers progressive enhancement, but is not necessary for this implementation: short CSS and Web Animations transitions can communicate changed results without replacing native navigation. [W3C status messages](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html) explains announcing changed status without unnecessarily moving focus. The interface uses live status text for search/availability, sensible result focus after deliberate search, and reduced-motion guards. Actual rendered behavior is still subject to browser verification.
+
+## Dependency audit and exact-version research
+
+The starter's production audit returned6 advisories (4high,2moderate) across js-yaml,svgo,smol-toml,devalue. Primary advisories andinstalledAstro ranges were checked. No demonstrated path from anonymous bookinginput to those vulnerableparsers wasfound, but compatiblefixes wereavailable. A notable discrepancy: devalue advisory metadata suggested5.9.1 whereas the [maintainer's5.9.2 release](https://github.com/sveltejs/devalue/releases/tag/v5.9.2) identifies theactualpatch. We required at least5.9.2.
+
+Installedpnpm11.9 help/versionedsource support targetedindirect update with --no-save --lockfile-only, so no root overrides ormanifestchanges were needed. Lockfile resolves js-yaml4.3.2,svgo4.1.0,smol-toml1.9.0,devalue5.9.4 plusSVGO'scompatibleparserdependencies. Frozeninstall succeeded; Astro7.3.3 andadapter11.1.6 stayedunchanged. Productionaudit repeated:0advisories. Fullcheck83/83passed afterupdate.

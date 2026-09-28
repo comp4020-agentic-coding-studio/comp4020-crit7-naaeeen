@@ -3,10 +3,12 @@
  * anonymous temporary database; it cannot target production or real bookings.
  * Supply PLAYWRIGHT_MODULE (an installed Playwright module path) when the package
  * is external to this repo, and optionally PLAYWRIGHT_CHROMIUM_EXECUTABLE.
- * Evidence goes to the gitignored .data/verification directory.
+ * Evidence goes to the gitignored .data/verification directory. --extended adds
+ * separate restored-page recovery probes; the default keeps the required flows focused.
  */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -16,8 +18,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const entry = join(root, "dist/server/entry.mjs");
 const artifacts = join(root, ".data/verification");
-const report = { startedAt: new Date().toISOString(), server: "isolated built server", checks: [], screenshots: [], firstViewport: [], console: [], externalRequests: [], expectedOfflineFailures: [] };
-const intentionallyOfflinePages = new WeakSet();
+const report = { startedAt: new Date().toISOString(), server: "isolated built server", checks: [], screenshots: [], firstViewport: [], console: [], externalRequests: [], unverified: ["Network interruption/reconnect is not exercised: the observed Chromium151 offline-emulation attempt kept the existing SSE stream open."], failures: [] };
 const temporary = mkdtempSync(join(tmpdir(), "common-room-browser-"));
 let server;
 let browser;
@@ -104,14 +105,10 @@ async function context(options = {}) {
     return route.abort();
   });
   value.on("page", (page) => {
-    page.on("pageerror", (error) => report.console.push({ type: "pageerror", message: error.message }));
+    page.on("pageerror", (error) => report.console.push({ type: "pageerror", message: error.message, url: page.url(), stack: error.stack }));
     page.on("console", (message) => {
       if (!["error", "warning"].includes(message.type())) return;
-      const detail = { type: message.type(), message: message.text(), url: message.location().url };
-      const offlineStream = intentionallyOfflinePages.has(page) && detail.url === `${baseUrl}/api/events` &&
-        /net::ERR_(INTERNET_DISCONNECTED|NETWORK_CHANGED|FAILED|CONNECTION_CLOSED)/.test(detail.message);
-      if (offlineStream) report.expectedOfflineFailures.push(detail);
-      else report.console.push(detail);
+      report.console.push({ type: message.type(), message: message.text(), url: message.location().url });
     });
   });
   return value;
@@ -119,16 +116,24 @@ async function context(options = {}) {
 
 async function screenshot(page, name, fullPage = true) {
   const path = join(artifacts, `${name}.png`);
-  await page.screenshot({ path, fullPage, animations: "disabled" });
-  report.screenshots.push(path);
+  await page.waitForFunction(() => document.getAnimations().every((animation) =>
+    animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity), null, { timeout: 3_000 });
+  await page.screenshot({ path, fullPage, animations: "allow" });
+  if (!report.screenshots.includes(path)) report.screenshots.push(path);
 }
 
 async function noOverflow(page, label) {
   const dimensions = await page.evaluate(() => ({
     width: innerWidth, document: document.documentElement.scrollWidth, body: document.body.scrollWidth,
   }));
-  assert(dimensions.document <= dimensions.width + 1 && dimensions.body <= dimensions.width + 1,
-    `${label}: horizontal overflow ${JSON.stringify(dimensions)}`);
+  if (dimensions.document > dimensions.width + 1 || dimensions.body > dimensions.width + 1) {
+    const offenders = await page.evaluate(() => [...document.querySelectorAll("main *")].filter((element) => {
+      const box = element.getBoundingClientRect();
+      return box.width > innerWidth || box.right > innerWidth + 1;
+    }).slice(0, 12).map((element) => ({ element: element.tagName, class: element.getAttribute("class"),
+      width: Math.round(element.getBoundingClientRect().width), minWidth: getComputedStyle(element).minWidth })));
+    throw new Error(`${label}: horizontal overflow ${JSON.stringify(dimensions)}; elements=${JSON.stringify(offenders)}`);
+  }
   const clipped = await page.locator("main input, main select, main button").evaluateAll((elements) => elements.filter((element) => {
     const style = getComputedStyle(element);
     if (!element.getClientRects().length || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
@@ -182,10 +187,10 @@ async function journey(label, viewport, day) {
     await noOverflow(page, `${label} landing`);
     const searchButton = await page.getByRole("button", { name: "Find a space", exact: true }).boundingBox();
     assert(searchButton && searchButton.y + searchButton.height <= viewport.height, `${label}: initial viewport must contain the search action.`);
-    report.firstViewport.push({ label, ...viewport, searchButtonBottom: searchButton.y + searchButton.height });
     await screenshot(page, `${label}-landing`);
     await screenshot(page, `${label}-landing-viewport`, false);
 
+    const beforeSkip = await page.evaluate(() => performance.timeOrigin);
     await page.keyboard.press("Tab");
     const skip = page.getByRole("link", { name: "Skip to content" });
     await focused(page, skip, `${label} skip link`);
@@ -193,11 +198,8 @@ async function journey(label, viewport, day) {
       page.waitForURL((url) => url.hash === "#main-content", { waitUntil: "load" }),
       skip.press("Enter"),
     ]);
-    console.log("SKIP DIAGNOSTIC", JSON.stringify(await page.evaluate(() => ({
-      active: document.activeElement?.outerHTML.slice(0, 180), target: document.getElementById("main-content")?.outerHTML.slice(0, 100),
-      href: document.querySelector(".skip-link")?.getAttribute("href"), url: location.href,
-      navigation: performance.getEntriesByType("navigation").map((entry) => ({ type: entry.type, name: entry.name })),
-    }))));
+    assert.equal(await page.evaluate(() => performance.timeOrigin), beforeSkip,
+      "Fragment-only skip navigation must not reload the document and erase keyboard focus.");
     await page.keyboard.press("Tab");
     await focused(page, page.getByLabel("Date", { exact: true }), `${label} skip-link destination`);
     await page.getByLabel("Date", { exact: true }).fill(tomorrowInCanberra(day));
@@ -218,6 +220,14 @@ async function journey(label, viewport, day) {
     assert.equal(new URL(page.url()).searchParams.get("date"), tomorrowInCanberra(day));
     await noOverflow(page, `${label} results`);
     await screenshot(page, `${label}-results`);
+    await page.getByLabel("Start time", { exact: true }).selectOption("11:00");
+    await updatedSearch(page, () => page.getByRole("button", { name: "Find a space", exact: true }).click());
+    assert.equal(new URL(page.url()).searchParams.get("start"), "11:00");
+    await connectedSearch(page, () => page.goBack({ waitUntil: "load" }));
+    assert.equal(await page.getByLabel("Start time", { exact: true }).inputValue(), "10:00");
+    assert.equal(await page.getByLabel("Date", { exact: true }).inputValue(), tomorrowInCanberra(day));
+    assert.equal(await page.getByLabel("Library", { exact: true }).inputValue(), "Chifley Library");
+    checked(`${label}: enhanced search Back restores the previous query and visible filters`);
     const availableCard = page.locator("[data-space-id]").filter({ has: page.getByRole("link", { name: "Review & book", exact: true }) }).first();
     const spaceId = await availableCard.getAttribute("data-space-id");
     const spaceName = await availableCard.getByRole("heading", { level: 3 }).innerText();
@@ -246,6 +256,8 @@ async function journey(label, viewport, day) {
     await screenshot(page, `${label}-detail`);
     await confirm.scrollIntoViewIfNeeded();
     await screenshot(page, `${label}-detail-action-viewport`, false);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await noOverflow(page, `${label} detail resized to the 390px marking viewport`);
     await page.setViewportSize({ width: 320, height: 812 });
     await noOverflow(page, `${label} detail resized to 320px`);
     assert.equal(await page.locator('input[name="date"]').inputValue(), tomorrowInCanberra(day));
@@ -345,7 +357,7 @@ async function reducedMotion() {
   } finally { await reduced.close(); }
 }
 
-async function reconnectRecovery() {
+async function availabilityRecovery() {
   const reader = await context({ viewport: { width: 390, height: 844 } });
   const writer = await context({ viewport: { width: 1920, height: 1080 } });
   try {
@@ -358,22 +370,17 @@ async function reconnectRecovery() {
     const date = page.getByLabel("Date", { exact: true });
     const draftDate = tomorrowInCanberra(5);
     await date.fill(draftDate);
-    intentionallyOfflinePages.add(page);
-    await reader.setOffline(true);
-    await page.locator("[data-availability-update]").waitFor({ state: "visible", timeout: 10_000 });
     await other.goto(detailsUrl);
     await other.getByRole("button", { name: "Confirm booking", exact: true }).click();
     await other.getByRole("heading", { name: "You’re booked in.", exact: true }).waitFor();
-    const reopened = page.waitForResponse((response) => response.url() === `${baseUrl}/api/events` && response.status() === 200, { timeout: 15_000 });
-    await Promise.all([reopened, reader.setOffline(false)]);
-    assert(await page.locator("[data-availability-update]").isVisible(), "Reconnect must leave a visible refresh notice for possibly missed updates.");
-    assert.equal(await date.inputValue(), draftDate, "Reconnect must preserve an unfinished date edit.");
-    assert(await date.evaluate((element) => element === document.activeElement), "Reconnect notice must not steal form focus.");
-    assert.equal(new URL(page.url()).searchParams.get("date"), day, "Reconnect must not silently rewrite the current search.");
+    await page.locator("[data-availability-update]").waitFor({ state: "visible" });
+    assert.equal(await date.inputValue(), draftDate, "An availability notice must preserve an unfinished date edit.");
+    assert(await date.evaluate((element) => element === document.activeElement), "An availability notice must not steal form focus.");
+    assert.equal(new URL(page.url()).searchParams.get("date"), day, "An availability notice must not silently rewrite the current search.");
     await date.fill(day);
     await refreshObserver(page);
     await page.locator('[data-space-id="chifley-room-1"]').getByText("Taken for part of your session", { exact: true }).waitFor();
-    checked("Offline/reconnect warns about missed updates, preserves draft input and focus, and refreshes a booking made in another browser");
+    checked("Cross-browser availability notices preserve draft input, focus and query until explicitly refreshed");
 
     await date.focus();
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
@@ -419,6 +426,79 @@ async function reconnectRecovery() {
   } finally { await Promise.all([reader.close(), writer.close()]); }
 }
 
+async function bookingRulesAndLimit() {
+  const account = await context({ viewport: { width: 390, height: 844 } });
+  try {
+    const page = await account.newPage();
+    const query = (day) => new URLSearchParams({ date: tomorrowInCanberra(day), start: "14:00", duration: "60", people: "2" });
+    const detail = (day) => `${baseUrl}/spaces/hancock-room-1/?${query(day)}`;
+    const count = async (expected) => {
+      await page.getByRole("heading", { name: "Booking rules", exact: true }).waitFor();
+      assert.equal((await page.locator("[data-active-count]").innerText()).replace(/\s+/g, " ").trim(), `${expected} of 2 active bookings`);
+    };
+    const daily = async (expected) => assert.match(await page.locator("[data-daily-allowance]").innerText(), new RegExp(`^${expected} minutes left`));
+    const book = async (day, previous) => {
+      await page.goto(detail(day));
+      await count(previous);
+      await page.getByRole("button", { name: "Confirm booking", exact: true }).click();
+      await page.getByRole("heading", { name: "You’re booked in.", exact: true }).waitFor();
+      await count(previous + 1);
+    };
+
+    await page.goto(`${baseUrl}/?${query(6)}`);
+    await count(0);
+    const rules = page.getByRole("complementary", { name: "Booking rules", exact: true });
+    for (const label of ["2 active bookings", "120 minutes per day", "30 / 60 / 90 / 120 min", "14 days ahead"]) {
+      await rules.getByText(label, { exact: true }).waitFor();
+    }
+    await book(6, 0);
+    await page.goto(`${baseUrl}/?${query(6)}`);
+    await daily(60);
+    await page.getByLabel("Date", { exact: true }).fill(tomorrowInCanberra(7));
+    await updatedSearch(page, () => page.getByRole("button", { name: "Find a space", exact: true }).click());
+    await daily(120);
+    await count(1);
+    await page.getByRole("complementary", { name: "Booking rules", exact: true }).scrollIntoViewIfNeeded();
+    await noOverflow(page, "mobile booking rules");
+    await screenshot(page, "mobile-booking-rules-viewport", false);
+    await book(7, 1);
+    await page.goto(detail(8));
+    await count(2);
+    await page.locator(".allowance-limit").getByText(/Your active-booking limit is reached/).waitFor();
+    await page.locator(".confirmation-allowance").scrollIntoViewIfNeeded();
+    await screenshot(page, "mobile-active-limit-viewport", false);
+    const refused = await account.request.post(`${baseUrl}/api/bookings`, {
+      headers: { origin: baseUrl }, timeout: 6_000,
+      data: { spaceId: "hancock-room-1", date: tomorrowInCanberra(8), start: "14:00", duration: 60, people: 2, requestId: randomUUID() },
+    });
+    assert.equal(refused.status(), 409);
+    assert.equal((await refused.json()).error.code, "active_limit");
+    await Promise.all([
+      page.waitForURL((url) => url.searchParams.get("error") === "active_limit"),
+      page.getByRole("button", { name: "Confirm booking", exact: true }).click(),
+    ]);
+    await page.getByRole("alert").getByText(/Your demo account already has 2 active bookings/).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get("date"), tomorrowInCanberra(8));
+    await count(2);
+    await page.getByRole("link", { name: "My bookings", exact: true }).click();
+    assert.equal(await page.locator(".booking-card").count(), 2);
+    await page.locator(".booking-card").first().locator("summary").filter({ hasText: /^Cancel booking$/ }).click();
+    await page.getByRole("button", { name: "Yes, cancel booking", exact: true }).click();
+    await page.getByText("Booking cancelled. Thanks for making room.", { exact: true }).waitFor();
+    await count(1);
+    await page.goto(`${baseUrl}/?${query(6)}`);
+    await daily(120);
+    await book(8, 1);
+    const listing = await account.request.get(`${baseUrl}/api/bookings`, { timeout: 6_000 });
+    const confirmed = (await listing.json()).bookings.filter((booking) => booking.status === "confirmed");
+    assert.equal(confirmed.length, 2);
+    assert.deepEqual(confirmed.map((booking) => booking.date).sort(), [tomorrowInCanberra(7), tomorrowInCanberra(8)]);
+    await noOverflow(page, "mobile recovered booking allowance");
+    await screenshot(page, "mobile-limit-recovered-viewport", false);
+    checked("Visible rules and date-specific allowance match actual bookings; max-two rejects API/native third bookings, and cancellation restores both count and daily allowance");
+  } finally { await account.close(); }
+}
+
 async function withoutJavaScript() {
   const native = await context({ viewport: { width: 390, height: 844 }, javaScriptEnabled: false });
   try {
@@ -426,17 +506,22 @@ async function withoutJavaScript() {
     await page.goto(baseUrl);
     await page.getByLabel("Date", { exact: true }).fill(tomorrowInCanberra(3));
     await page.getByLabel("Start time", { exact: true }).selectOption("11:00");
-    await page.getByRole("button", { name: "Find a space", exact: true }).click();
-    await page.getByRole("link", { name: "Review & book", exact: true }).first().click();
-    await page.getByRole("button", { name: "Confirm booking", exact: true }).click();
+    await page.getByRole("button", { name: "Find a space", exact: true }).focus();
+    await Promise.all([page.waitForURL((url) => url.searchParams.get("start") === "11:00"), page.keyboard.press("Enter")]);
+    await page.getByRole("link", { name: "Review & book", exact: true }).first().focus();
+    await Promise.all([page.waitForURL(/\/spaces\//), page.keyboard.press("Enter")]);
+    await page.getByRole("button", { name: "Confirm booking", exact: true }).focus();
+    await Promise.all([page.waitForURL(/\/bookings\/\?created=/), page.keyboard.press("Enter")]);
     await page.getByRole("heading", { name: "You’re booked in.", exact: true }).waitFor();
     await page.reload();
     assert.equal(await page.locator(".booking-card").count(), 1);
-    await page.locator("summary").filter({ hasText: /^Cancel booking$/ }).click();
-    await page.getByRole("button", { name: "Yes, cancel booking", exact: true }).click();
+    await page.locator("summary").filter({ hasText: /^Cancel booking$/ }).focus();
+    await page.keyboard.press("Enter");
+    await page.getByRole("button", { name: "Yes, cancel booking", exact: true }).focus();
+    await Promise.all([page.waitForURL(/\/bookings\/\?cancelled=/), page.keyboard.press("Enter")]);
     await page.getByText("Booking cancelled. Thanks for making room.", { exact: true }).waitFor();
     await noOverflow(page, "no JavaScript cancellation");
-    checked("Mobile search, booking, reload and cancellation work with JavaScript disabled");
+    checked("Mobile native keyboard search, booking, reload and cancellation work with JavaScript disabled");
   } finally { await native.close(); }
 }
 
@@ -452,18 +537,36 @@ try {
     try {
       const page = await preview.newPage();
       await page.goto(baseUrl);
-      await page.getByRole("button", { name: "Find a space", exact: true }).waitFor();
+      const button = page.getByRole("button", { name: "Find a space", exact: true });
+      await button.waitFor();
+      const box = await button.boundingBox();
+      assert(box);
+      report.firstViewport.push({ label: name, ...viewport, searchButtonBottom: box.y + box.height });
       await screenshot(page, `${name}-landing-viewport`, false);
     } finally { await preview.close(); }
   }
-  await journey("desktop", { width: 1920, height: 1080 }, 1);
-  await journey("mobile", { width: 390, height: 844 }, 2);
-  await reducedMotion();
-  await reconnectRecovery();
-  await withoutJavaScript();
+  // Independent contexts/dates let one failure still leave useful evidence for
+  // the other required flows; every case remains bounded and closes its context.
+  const extended = process.argv.includes("--extended");
+  report.mode = extended ? "required plus extended recovery" : "required flows and booking rules";
+  const cases = [
+    ["desktop", () => journey("desktop", { width: 1920, height: 1080 }, 1)],
+    ["mobile", () => journey("mobile", { width: 390, height: 844 }, 2)],
+    ["booking rules and active limit", bookingRulesAndLimit], ["no JavaScript", withoutJavaScript],
+  ];
+  if (extended) cases.push(["reduced motion", reducedMotion], ["availability recovery", availabilityRecovery]);
+  else report.unverified.push("Persisted-pageshow/BFCache recovery is excluded from this required-flow pass; use --extended for those additional probes.");
+  for (const [name, run] of cases) {
+    try { await run(); }
+    catch (error) {
+      report.failures.push({ name, error: error.stack ?? String(error) });
+      console.error(`FAIL ${name}: ${error.stack ?? String(error)}`);
+    }
+  }
+  assert.equal(report.failures.length, 0, "All browser journeys must pass; see individual failures in the report.");
   assert.deepEqual(report.externalRequests, [], "No external network dependency is expected for the booking flow.");
   assert.deepEqual(report.console, [], "Browser console must have no warnings, errors or uncaught exceptions.");
-  checked("No unexpected browser warnings/errors and all application resources served locally; intentional offline SSE errors recorded separately");
+  checked("No browser warnings/errors and all application resources served locally");
   report.passed = true;
 } catch (error) {
   report.passed = false;

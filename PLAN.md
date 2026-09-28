@@ -1,68 +1,64 @@
 # Crit 7 implementation plan
 
-Status: backend and frontend implementation underway; baseline green; Edge page observed; Fly credential and assigned app verified.
-Updated 2026-09-28. Existing baseline: `9aed042` (preserve); origin baseline `718bf75`.
+Updated 28 September 2026. Status: implementation and local/live verification complete; final authorized GitHub publication is being performed. See docs/VERIFICATION.md and the remote Actions record.
 
-## Outcome
+## Outcome and user priorities
 
-Build Common Room, an independent ANU study-space booking prototype. A student specifies when, for how long, and for how many people; compares suitable spaces; creates a booking; returns after reload/restart; and cancels only their own booking. A conflicting reservation is rejected atomically and useful nearby alternatives are available. The deployed Fly app is the artefact.
+Common Room is an independent ANU study-space booking prototype. A visitor chooses a date, time, duration and party size, compares suitable spaces across libraries, books a complete interval, returns to a persisted booking, and cancels only their own future reservation.
 
-## Evidence and scope
+The user chose all three priorities: full-interval matching, cross-library comparison, and clear facilities/booking status. They asked for thoughtful motion and permitted suitable compatible packages/APIs. The implemented interface uses native forms, CSS and finite Web Animations; no extra animation dependency or external booking integration was needed.
 
-- Current C7 brief, assessment, hosting, Week 7 lecture and upstream history were read. See docs/RESEARCH.md.
-- User supplied four screenshots of their logged-in LibCal flow. Edge read failed the Computer Use URL-confidence check before page inspection; do not call this a live interaction audit. User prefers Edge; awaiting a clearly selected booking window before another eligible attempt.
-- A2 implementation-goals and evidence docs inform coherent slices, source boundaries, independent review, actual browser checks and contemporary evidence. A2-specific content, aesthetic and approval gates are not copied.
-- C7 is still labelled Draft. Specific C7/lecture/hosting require Fly; generic assessment cutover wording disagrees.
-- Current upstream main became the final-project placeholder on 24 Sept. Retain this provisioned C7 Astro stack, invariant checks, README check, SSE/HTTPS/CSRF probes and Fly resources.
+## Grounding and scope
 
-## Implementation choices
+Read the current C7 brief, assessment/crit/hosting rules, Week 7 lecture, actual starter and upstream history. Read A2 implementation-goals and evidence material as a method reference. Preserve the unrelated modified A2 PROCESS.md.
 
-Use the installed Astro 7 / Node adapter 11 / Drizzle 0.45 / SQLite stack. Responsive, server-rendered HTML first; native search and booking forms; optional client enhancement and SSE availability notices. Retain /api/events and full /readme/. No ANU SSO, real booking integration, email or personal student data. Clearly label demo inventory/availability. Browser ownership uses a server-generated opaque HttpOnly cookie; only its hash reaches persisted booking ownership. No token in HTML/URLs/events.
+The user supplied screenshots and allowed Edge inspection. After an initial URL-confidence failure and window-position recovery, the existing authenticated Edge interface was inspected read-only. The accessible search's 1-4 capacity bucket returned 63 mixed-size options. Its equipment and accessibility filters already exist. The design response is exact group-size compatibility and a complete requested interval, not a claim that those existing filters are missing. No real ANU reservation was created or cancelled. See docs/RESEARCH.md.
 
-A compact warm-paper and dark-forest interface, strong typography and visible availability text. The first mobile screen contains a useful search action. Filter controls replace scanning a huge timetable; a card states capacity, facilities, requested interval and booking action. All libraries/types can be compared, with understandable empty and conflict states. Motion is brief and respects reduced motion.
+Current upstream main was changed into a final-project placeholder. Keep this provided C7 Astro/Drizzle/SQLite application and its fixed Fly resources, README/invariant checks, SSE stream, HTTPS-origin and CSRF probes. Do not import the newer placeholder.
 
-Prototype choices (not claims about universal ANU policy): 15-minute start increments; 30/60/90/120-minute durations; 120 confirmed minutes per browser per date; book within the next 14 days; sample opening hours 07:00-23:00 Canberra local time. Distinguish study-room rules from the newer booth/desk check-in policy; do not implement guessed no-show automation.
+All space inventory, facilities and hours are illustrative and labelled as such. No ANU login, email, real booking writes or personal student data. Prototype rules: 15-minute starts; 30/60/90/120-minute duration; up to 8 people; today through 14 days ahead in Australia/Sydney; sample hours 07:00-23:00; up to 120 confirmed minutes per browser per date.
 
-## Sequence and dependencies
+## Implemented contract
 
-1. Research baseline and this plan. Baseline pnpm check: 28/28 tests, zero typecheck errors/warnings.
-2. Backend RED/GREEN: schema/migration, catalogue, validated availability, opaque owner, atomic booking, owned cancellation, rate/body limits and SSE invalidation. Preserve deploy contracts.
-3. Frontend vertical flow: search/results, room detail, confirmation/my bookings/cancel, readable project account. Integrate against agreed service interfaces below.
-4. Independent review plus adversarial HTTP tests and browser verification against built server. Repair supported findings; rerun affected checks.
-5. Verify credential ignored by Git and Docker, use course Fly app with fixed shape, deploy and verify real HTTPS/persistence. Never expose token. Inspect final diff and commit/push coherent verified checkpoints under repo authorization.
-6. Prepare accurate process evidence and a clearly identified student-review draft. Do not invent personal reflection or say agent writing is student-authored. Repository publication/course ship requires explicit user approval after a reviewable result.
+- Immediate SQLite transaction includes owner-scoped idempotency, current-time validation, daily allowance and overlap checking plus insert. Identical retry returns the same record; changed data under the same request identifier fails. Adjacent intervals are allowed.
+- Owner-checked cancellation persists and releases availability. Schema changes use committed Drizzle migrations; the original migration remains intact.
+- An unpredictable HttpOnly cookie links this browser to its own bookings; only its hash is stored. Cookie lifetime is 60 days. Cookie bootstrap occurs on HTML entry or the owner-list API, never assets/SSE. Private responses use no-store.
+- JSON and native form mutations have exact-origin checks, streaming request-size bounds and rate limits. Native error redirects retain validated search fields. There are no owner identifiers or reservation details in public SSE events.
+- Search and booking work without JavaScript. Enhancements preserve focus and drafts, announce status, respect reduced motion and warn about stale availability after disconnection or restored pages.
+- All four page types are in invariant coverage. /readme/ publishes the complete README. Dynamic page validation has regression checks.
 
-## Acceptance
+## Evidence and checkpoints
 
-- Complete create -> reload -> server restart -> owned view -> cancel journey.
-- At most one confirmed overlapping reservation even under concurrent requests; adjacent intervals allowed. Duplicate request identifiers do not create duplicate reservations.
-- Backend validates date/time/range/duration/space/capacity/daily allowance and rejects invalid, past and cross-origin writes.
-- Another browser cannot list or cancel another owner's bookings. SSE carries no identity or booking secrets. State persists in DATABASE_PATH.
-- Keyboard and both 1920x1080 and 390x844 viewports work; no horizontal page overflow, clipped controls, unexplained empty states or console errors. Narrow/resize/reduced-motion checks recorded honestly.
-- Required invariant/readme/evidence checks and real Fly HTTPS/CSRF/SSE/link probes pass, with limitations explicit. Record actual coverage only if supported.
+- Original local harness: 9aed042; preserved.
+- 5d33253: research and implementation plan, local commit.
+- d1765ff: complete booking implementation, local commit.
+- Baseline check: 28/28 tests. Backend availability RED: expected200, starter returned404. Restart/migration RED: starter owner API returned404.
+- Current full check after dependency refresh and keyboard-history repair: 83/83 tests in8files; zero type errors, warnings or hints. Built-server restart/migration, concurrent booking, owner isolation, date boundaries, SSE cleanup, page recovery and invariant checks are included.
+- Production dependency audit: zero advisories after compatible transitive refresh. Astro remains7.3.3 and Node adapter11.1.6.
+- Independent review found and prompted fixes for malformed-date formatting, inadequate past-time test coverage, stale form errors, missed SSE updates and hash-navigation focus. Real browser verification is still running; do not equate the suite with browser success.
 
-## Shared interfaces / file ownership
+## Deployment and permissions
 
-Backend worker owns src/lib/*, src/middleware.ts, src/env.d.ts if needed, src/pages/api/*, drizzle/*, spec/booking*.test.ts and retirement of spec/guestbook.test.ts. Frontend worker owns src/pages/*.astro and nested non-api pages, src/components/*, src/layouts/*, src/styles.css, src/client/* and public original assets. Parent owns docs, PLAN, README, PROCESS/reflection coordination, routes coverage, browser verification and commits. Do not change package/lock/toolchain/deploy files without parent coordination.
+Fly credential is in ignored, mode0600 mise.local.toml and excluded from the Docker context; never read/print it in notes. Existing CLI: /home/lizhi/.local/share/mise/installs/flyctl/0.4.108/flyctl, run through mise exec. App: comp4020-crit7-naaeeen. Keep one256MB machine, one1GB volume, auto-stop and port4321.
 
-Backend exports from src/lib/booking.ts:
-- searchAvailability(params: URLSearchParams, now?: Date): AvailabilityResult (normalised filters + field errors, never throw for invalid search)
-- listBookings(ownerToken: string | undefined, now?: Date): BookingView[] (current owner's, including cancelled records)
-- getSpace(id: string): Space | undefined
-- date helpers/default constants as explicitly exported and coordinated with frontend.
+Untouched baseline deployment succeeded. Common Room then deployed successfully and its real HTTPS URL returned200 with the new interface. The final keyboard fix awaits deployment after browser confirmation. Local preview port4407 uses .data/preview.db; the existing unrelated listener on4321 was preserved.
 
-Shared types in src/lib/types.ts: SearchFilters {date,start,duration,people,library,kind,features:string[]}; Space {id,name,library,kind:'room'|'booth'|'desk',capacity,floor,features:string[],description,accessible:boolean}; AvailabilityResult {filters,results:AvailabilityItem[],totalSpaces,availableCount,errors:Record<string,string>,dateMin,dateMax}; AvailabilityItem {space,available,start,end,alternatives:{date,start,end}[]}; BookingView {id,reference,space,date,start,end,duration,people,status:'confirmed'|'cancelled',createdAt,canCancel}.
+Repository remains private. Automatic approval rejected the attempted remote push because explicit current-conversation push authorization was absent. Do not retry through another path. Ask for explicit push/publication authorization only against the completed reviewable result. Making the repository public/course ship is a separate action.
 
-API: GET /api/availability returns AvailabilityResult; GET /api/bookings returns {bookings}; POST /api/bookings accepts {spaceId,date,start,duration,people,requestId}; POST /api/bookings/[id]/cancel. Mutations accept JSON (explicit same-origin guard) and native form data. JSON success {booking}; JSON error {error:{code,message,fields?}} with appropriate status. Forms redirect 303 to /bookings/?created=<id> or ?cancelled=<id>; recoverable create errors redirect back to filtered search with a whitelisted error code, retaining user inputs. Identity exclusively context.locals.bookingOwner. SSE event availability contains {spaceId,date} only, immediate opening comment preserved.
+## Completed release checks
 
-## Current handoff
+The final rule implementation passed87/87 required tests and the evidence gate. The real browser run passed15checks with zero warnings/errors, including desktop/phone, mobile sizing, quota recovery, keyboard/history, motion and no-JavaScript keyboard flow. The actual Fly deployment preserved a booking across redeploy, enforced the active cap, served the verified ANU logo and passed origin/SSE checks; all anonymous live test bookings were cancelled. Precise limits remain in docs/VERIFICATION.md.
 
-No product files changed yet. Baseline green. Parent has read both harnesses and A2 implementation-goals. Remote visibility, Fly credential/deploy and browser environment remain to be checked. All token values must remain out of task notes and output.
+The user explicitly authorized push and public visibility to complete C7 submission. Final publication must preserve these tested source files and verify the remote workflow outcome. Process/reflection files are transparent Codex-assisted drafts grounded in the user’s directions and the observed record; the student should read them before presenting.
 
-## Independent plan review applied
+## Ownership and runtime
 
-Daily allowance and owner-scoped idempotency are checked inside the same immediate transaction as overlap+insert. Same request identifier with changed inputs fails. Owner cookie is initialized only on HTML entry or explicit API bootstrap; never assets/SSE. Private booking responses use no-store. Calendar arithmetic uses Australia/Sydney date fields across DST. Failed native forms carry whitelisted library/kind/features filters as well as booking inputs. Tests must prove create and cancel broadcasts (not just opening bytes), migration from starter, and restart persistence against the same database.
+Backend: src/lib, middleware, APIs, schema/migrations and booking tests. Frontend: pages, components, layout, styles, client and original SVG. Verification worker: scripts/verify-browser.mjs and restart test. Parent: integration, docs, routes, final review, commits and deployment. Everyone shares the worktree; preserve others' edits.
 
-Deployment feasibility checked early: ignored local token stored mode0600 without displaying it; ignored by Docker too. Only the generated env config was trusted by mise. Fly status verifies assigned app and course owner; no image deployed yet. Existing Fly CLI is installed under mise 0.4.108, outside login PATH. Existing Playwright package found under ~/.local/share/codex-mcp/20260926-v3/packages/node_modules/playwright.
+Use Ubuntu as lizhi and the actual repo /home/lizhi/comp4020/comp4020-crit7-naaeeen. Run project tools through mise exec (Node24.18.1/pnpm11.9.0). Browser harness uses existing Playwright with installed Chromium151.0.7922.34; that is not a claim of latest-stable Chrome. Artefacts live in ignored .data/verification. Detailed decisions and verification remain in docs/PROCESS-EVIDENCE.md and docs/RESEARCH.md.
 
-User further requested more meaningful motion/UX and permits suitable project packages or APIs if compatible. Preserve reduced motion, keyboard control, no blocked content, and document dependencies actually chosen.
+## Final user-requested rules
+
+The user requested conspicuous, enforced booking-count and duration rules. The chosen prototype policy is at most two confirmed reservations whose end is still in the future, including ongoing sessions, across all dates. The existing120-minute daily total,30/60/90/120-minute sessions,14-day advance window and Canberra time remain unchanged. Cancellation before the start releases both count and allowance. This is a demo account saved in the browser, not an ANU login. Backend/front-end workers are implementing this shared policy and the verifier is adding one focused end-to-end quota case.
+
+The user also explicitly requested the ANU logo and stronger motion. The verified original university header logo is in public/anu-logo.png; see docs/ASSETS.md. Native proportions and the student-project label remain clear.
